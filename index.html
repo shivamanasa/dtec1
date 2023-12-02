@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Human and Sound Detection</title>
+    <title>Live Human and Motion Detection</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -41,10 +41,6 @@
             background-color: green;
         }
 
-        #blue-light {
-            background-color: #6fa0e4;
-        }
-
         #red-light {
             background-color: red;
         }
@@ -59,15 +55,15 @@
         video {
             width: 100%;
             border-radius: 8px;
+            height: 500px;
         }
     </style>
 </head>
 <body>
-    <header>Live Human and Sound Detection</header>
+    <header>Live Human and Motion Detection</header>
     
     <div id="lights">
         <div id="green-light" class="light"></div>
-        <div id="blue-light" class="light"></div>
         <div id="red-light" class="light"></div>
     </div>
 
@@ -75,13 +71,17 @@
         <video id="video" autoplay playsinline></video>
     </div>
 
-    <audio id="detection-sound" src="path/to/detection-sound.mp3" preload="auto"></audio>
-    <audio id="sound-detection-sound" src="path/to/sound-detection-sound.mp3" preload="auto"></audio>
+    <audio id="detection-sound" src="./person_frontyard_v2.mp3" preload="auto"></audio>
 
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <script src="https://trackingjs.com/external/compatibility.js"></script>
+    <script src="https://trackingjs.com/external/matter.js"></script>
+    <script src="https://trackingjs.com/build/tracking.js"></script>
     <script>
         async function setupCamera() {
             const video = document.getElementById('video');
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ 'video': true });
             video.srcObject = stream;
 
             return new Promise((resolve) => {
@@ -91,90 +91,24 @@
             });
         }
 
-        async function detect() {
-            const video = await setupCamera();
+        async function detect(model, video) {
+            const predictions = await model.detect(video);
+
             const greenLight = document.getElementById('green-light');
-            const blueLight = document.getElementById('blue-light');
             const redLight = document.getElementById('red-light');
-            const soundDetectionSound = document.getElementById('sound-detection-sound');
 
-            video.volume = 0; // Mute the video to avoid feedback noise
+            if (predictions.some(prediction => prediction.class === 'person' && prediction.score > 0.5)) {
+                // If person detected, show green light, hide red light, and play the detection sound
+                greenLight.style.backgroundColor = 'green';
+                redLight.style.backgroundColor = '#ccc'; // Reset red light color
+                playDetectionSound();
+            } else {
+                // If no person detected, show red light, hide green light
+                greenLight.style.backgroundColor = '#ccc'; // Reset green light color
+                redLight.style.backgroundColor = 'red';
+            }
 
-            video.addEventListener('play', () => {
-                let personDetected = false;
-                let soundDetected = false;
-
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const analyser = audioContext.createAnalyser();
-                const microphone = audioContext.createMediaStreamSource(video.srcObject);
-
-                microphone.connect(analyser);
-
-                analyser.fftSize = 256;
-                const bufferLength = analyser.frequencyBinCount;
-                const dataArray = new Uint8Array(bufferLength);
-
-                analyser.getByteFrequencyData(dataArray);
-
-                const threshold = 50; // Adjust this threshold based on your environment
-
-                function checkDetection() {
-                    analyser.getByteFrequencyData(dataArray);
-                    const average = calculateAverage(dataArray);
-
-                    if (average > threshold) {
-                        soundDetected = true;
-                        blueLight.style.backgroundColor = '#6fa0e4';
-                        playDetectionSound();
-                    } else {
-                        soundDetected = false;
-                        blueLight.style.backgroundColor = '#ccc';
-                        playSoundDetectionSound();
-                    }
-
-                    if (personDetected) {
-                        greenLight.style.backgroundColor = 'green';
-                        redLight.style.backgroundColor = '#ccc';
-                    } else if (soundDetected) {
-                        greenLight.style.backgroundColor = '#ccc';
-                        redLight.style.backgroundColor = '#ccc';
-                    } else {
-                        greenLight.style.backgroundColor = '#ccc';
-                        redLight.style.backgroundColor = 'red';
-                    }
-
-                    requestAnimationFrame(checkDetection);
-                }
-
-                video.addEventListener('loadedmetadata', () => {
-                    const model = window['cocoSsd']; // Assume cocoSsd is loaded globally
-                    detectPerson(model, video, () => {
-                        personDetected = true;
-                    });
-                });
-
-                checkDetection();
-            });
-        }
-
-        function calculateAverage(array) {
-            const sum = array.reduce((acc, value) => acc + value, 0);
-            return sum / array.length;
-        }
-
-        function detectPerson(model, video, callback) {
-            model.load().then((loadedModel) => {
-                function detect() {
-                    loadedModel.detect(video).then((predictions) => {
-                        const personPresent = predictions.some(prediction => prediction.class === 'person' && prediction.score > 0.5);
-                        if (personPresent) {
-                            callback();
-                        }
-                        requestAnimationFrame(detect);
-                    });
-                }
-                detect();
-            });
+            requestAnimationFrame(() => detect(model, video));
         }
 
         function playDetectionSound() {
@@ -182,12 +116,27 @@
             detectionSound.play();
         }
 
-        function playSoundDetectionSound() {
-            const soundDetectionSound = document.getElementById('sound-detection-sound');
-            soundDetectionSound.play();
+        function setupMotionDetection(video) {
+            const tracker = new tracking.ObjectTracker('face');
+            
+            tracking.track(video, tracker);
+
+            tracker.on('track', (event) => {
+                if (event.data.length > 0) {
+                    // Motion detected, you can add additional logic here
+                    console.log('Motion detected!');
+                }
+            });
         }
 
-        detect();
+        async function run() {
+            const video = await setupCamera();
+            const model = await cocoSsd.load();
+            detect(model, video);
+            setupMotionDetection(video);
+        }
+
+        run();
     </script>
 </body>
 </html>
