@@ -1,142 +1,166 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Human and Motion Detection</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            background-color: #f4f4f4;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Human Detection</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: #f4f4f4;
+    }
 
-        header {
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 24px;
-            color: #333;
-        }
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 24px;
+      color: #333;
+    }
 
-        #lights {
-            display: flex;
-            gap: 20px;
-        }
+    #lights {
+      display: flex;
+      gap: 20px;
+    }
 
-        .light {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background-color: #ccc;
-            transition: background-color 0.5s; /* Add smooth transition effect */
-        }
+    .light {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background-color: #ccc;
+      transition: background-color 0.5s; /* Add smooth transition effect */
+    }
 
-        #green-light {
-            background-color: green;
-        }
+    #green-light {
+      background-color: green;
+    }
 
-        #red-light {
-            background-color: red;
-        }
+    #red-light {
+      background-color: red;
+    }
 
-        #video-container {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            margin: 20px 0;
-        }
+    #video-container {
+      position: relative;
+      width: 100%;
+      max-width: 800px;
+      margin: 20px 0;
+    }
 
-        video {
-            width: 100%;
-            border-radius: 8px;
-            height: 500px;
-        }
-    </style>
+    video {
+      width: 100%;
+      border-radius: 8px;
+      height: 500px;
+    }
+
+    #loading-time,
+    #countdown {
+      font-size: 18px;
+      color: #555;
+      margin-top: 10px;
+    }
+  </style>
 </head>
+
 <body>
-    <header>Live Human and Motion Detection</header>
-    
-    <div id="lights">
-        <div id="green-light" class="light"></div>
-        <div id="red-light" class="light"></div>
-    </div>
+  <header>Live Human Detection</header>
 
-    <div id="video-container">
-        <video id="video" autoplay playsinline></video>
-    </div>
+  <div id="lights">
+    <div id="green-light" class="light"></div>
+    <div id="red-light" class="light"></div>
+  </div>
 
-    <audio id="detection-sound" src="./person_frontyard_v2.mp3" preload="auto"></audio>
+  <div id="video-container">
+    <video id="video" autoplay playsinline></video>
+  </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
-    <script src="https://trackingjs.com/external/compatibility.js"></script>
-    <script src="https://trackingjs.com/external/matter.js"></script>
-    <script src="https://trackingjs.com/build/tracking.js"></script>
-    <script>
-        async function setupCamera() {
-            const video = document.getElementById('video');
-            const stream = await navigator.mediaDevices.getUserMedia({ 'video': true });
-            video.srcObject = stream;
+  <audio id="detection-sound" src="./person_frontyard_v2.mp3" preload="auto"></audio>
 
-            return new Promise((resolve) => {
-                video.onloadedmetadata = () => {
-                    resolve(video);
-                };
-            });
-        }
+  <div id="loading-time">Loading...</div>
+  <div id="countdown">Time Elapsed: 0 seconds</div>
 
-        async function detect(model, video) {
-            const predictions = await model.detect(video);
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <script>
+    async function setupCamera() {
+      const video = document.getElementById('video');
+      const stream = await navigator.mediaDevices.getUserMedia({ 'video': true });
+      video.srcObject = stream;
 
-            const greenLight = document.getElementById('green-light');
-            const redLight = document.getElementById('red-light');
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => {
+          resolve(video);
+        };
+      });
+    }
 
-            if (predictions.some(prediction => prediction.class === 'person' && prediction.score > 0.5)) {
-                // If person detected, show green light, hide red light, and play the detection sound
-                greenLight.style.backgroundColor = 'green';
-                redLight.style.backgroundColor = '#ccc'; // Reset red light color
-                playDetectionSound();
-            } else {
-                // If no person detected, show red light, hide green light
-                greenLight.style.backgroundColor = '#ccc'; // Reset green light color
-                redLight.style.backgroundColor = 'red';
-            }
+    async function detect(model, video) {
+      const startTime = new Date().getTime();
+      const countdownDisplay = document.getElementById('countdown');
 
-            requestAnimationFrame(() => detect(model, video));
-        }
+      function updateCountdown() {
+        const elapsedTime = (new Date().getTime() - startTime) / 1000;
+        countdownDisplay.innerText = `Time Elapsed: ${elapsedTime.toFixed(2)} seconds`;
+      }
 
-        function playDetectionSound() {
-            const detectionSound = document.getElementById('detection-sound');
-            detectionSound.play();
-        }
+      const countdownInterval = setInterval(updateCountdown, 1000);
 
-        function setupMotionDetection(video) {
-            const tracker = new tracking.ObjectTracker('face');
-            
-            tracking.track(video, tracker);
+      const predictions = await model.detect(video);
 
-            tracker.on('track', (event) => {
-                if (event.data.length > 0) {
-                    // Motion detected, you can add additional logic here
-                    console.log('Motion detected!');
-                }
-            });
-        }
+      const greenLight = document.getElementById('green-light');
+      const redLight = document.getElementById('red-light');
 
-        async function run() {
-            const video = await setupCamera();
-            const model = await cocoSsd.load();
-            detect(model, video);
-            setupMotionDetection(video);
-        }
+      if (predictions.some(prediction => prediction.class === 'person' && prediction.score > 0.5)) {
+        // If person detected, show green light, hide red light, and play the detection sound
+        greenLight.style.backgroundColor = 'green';
+        redLight.style.backgroundColor = '#ccc'; // Reset red light color
+        playDetectionSound();
 
-        run();
-    </script>
+        // Stop the countdown when a person is detected
+        clearInterval(countdownInterval);
+        countdownDisplay.style.display = 'none';
+
+        // Hide loading time display
+        document.getElementById('loading-time').style.display = 'none';
+      } else {
+        // If no person detected, show red light, hide green light
+        greenLight.style.backgroundColor = '#ccc'; // Reset green light color
+        redLight.style.backgroundColor = 'red';
+      }
+
+      requestAnimationFrame(() => detect(model, video));
+    }
+
+    function playDetectionSound() {
+      const detectionSound = document.getElementById('detection-sound');
+      detectionSound.play();
+    }
+
+    async function run() {
+      const video = await setupCamera();
+      const model = await cocoSsd.load();
+
+      const countdownDisplay = document.getElementById('countdown');
+      let countdownTime = 0;
+
+      // Start the countdown
+      const countdownInterval = setInterval(() => {
+        countdownDisplay.innerText = `Time Elapsed: ${countdownTime.toFixed(2)} seconds`;
+        countdownTime++;
+      }, 1000);
+
+      // Start detection
+      detect(model, video);
+    }
+
+    run();
+  </script>
 </body>
+
 </html>
